@@ -1,1 +1,309 @@
-test
+<title>爭上游</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;800&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  /* Layout: one centered column. Create / join buttons on top, then the player's hand as a wrapped row of tappable cards. */
+  :root {
+    --bg: #e9eeea;
+    --surface: #f7f9f6;
+    --fg: #16241f;
+    --muted: #5b6b64;
+    --line: #c9d3cd;
+    --accent: #1f6b57;
+    --accent-fg: #f4faf7;
+    --card: #fffdf8;
+    --card-edge: #cfc8b8;
+    --card-used: #bfc4c0;
+    --card-used-fg: #7d8581;
+    --suit-red: #c0332b;
+    --suit-black: #1c2421;
+    --font-display: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+    --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1a17;
+      --surface: #16251f;
+      --fg: #e6efe9;
+      --muted: #93a79d;
+      --line: #284038;
+      --accent: #5fc4a3;
+      --accent-fg: #0b1713;
+      --card: #f3efe4;
+      --card-edge: #0b1210;
+      --card-used: #3a4742;
+      --card-used-fg: #6c7a74;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1a17;
+    --surface: #16251f;
+    --fg: #e6efe9;
+    --muted: #93a79d;
+    --line: #284038;
+    --accent: #5fc4a3;
+    --accent-fg: #0b1713;
+    --card: #f3efe4;
+    --card-edge: #0b1210;
+    --card-used: #3a4742;
+    --card-used-fg: #6c7a74;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    padding-inline: 16px;
+    padding-block: 32px 48px;
+  }
+  main { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 20px; }
+  h2 { font-family: var(--font-display); font-size: 1.15rem; margin: 0; }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, input { font: inherit; }
+  button.act {
+    min-height: 44px;
+    padding-inline: 22px;
+    border-radius: 4px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-fg);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  button.act.ghost { background: transparent; color: var(--accent); }
+  button.act:hover { filter: brightness(1.08); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  label { display: block; margin-bottom: 6px; }
+  input {
+    flex: 1 1 140px;
+    max-width: 220px;
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 12px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+  }
+  .seed {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 1.5rem;
+    letter-spacing: 0.12em;
+    font-variant-numeric: tabular-nums;
+    user-select: all;
+  }
+  .msg { margin: 0; }
+  .msg.err { color: var(--suit-red); }
+
+  .table {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+  }
+  .hand { display: flex; flex-wrap: wrap; gap: 8px; }
+  .card {
+    width: 54px;
+    aspect-ratio: 5 / 7;
+    max-width: 100%;
+    padding: 4px 3px;
+    background: var(--card);
+    border: 1px solid var(--card-edge);
+    border-radius: 5px;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    justify-items: center;
+    font-family: var(--font-display);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--suit-black);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: background-color 0.12s, color 0.12s, opacity 0.12s;
+  }
+  .card.red { color: var(--suit-red); }
+  .card .rank { font-size: 1.05rem; align-self: start; }
+  .card .suit { font-size: 1.7rem; align-self: center; }
+  .card.joker { padding-top: 6px; }
+  .card.joker .rank { writing-mode: vertical-rl; font-size: 1rem; letter-spacing: 0.1em; align-self: center; grid-row: 1 / span 2; }
+  .card.used {
+    background: var(--card-used);
+    color: var(--card-used-fg);
+    opacity: 0.6;
+    box-shadow: none;
+  }
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+  [hidden] { display: none !important; }
+</style>
+
+<main>
+  <div class="row" id="choose">
+    <button class="act" id="create" type="button">創建</button>
+    <button class="act ghost" id="join" type="button">加入</button>
+  </div>
+
+  <form id="joinForm" hidden>
+    <label for="seedIn">輸入你的種子:</label>
+    <div class="row">
+      <input id="seedIn" inputmode="numeric" maxlength="5" autocomplete="off">
+      <button class="act" type="submit">加入</button>
+    </div>
+  </form>
+
+  <p class="msg" id="seedMsg" hidden>請給你的朋友分享這個種子: <span class="seed" id="seedOut"></span></p>
+  <p class="msg err" id="err" role="alert" hidden>無效輸入，請你重新開始!</p>
+
+  <section class="table" id="table" hidden>
+    <h2 id="who"></h2>
+    <div class="hand" id="hand"></div>
+  </section>
+</main>
+
+<script>
+  // Seeded PRNG (mulberry32) and Fisher-Yates shuffle
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  var SUITS = ['♠', '♥', '♦', '♣'];
+  var RANKS = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2'];
+  var RANK_ORDER = { '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14, '2': 15, 'BJ': 16, 'RJ': 17 };
+
+  function shuffle(seed) {
+    var rand = mulberry32(seed);
+    var deck = [];
+    RANKS.forEach(function (r) { SUITS.forEach(function (s) { deck.push({ rank: r, suit: s }); }); });
+    deck.push({ rank: 'RJ', suit: '' });
+    deck.push({ rank: 'BJ', suit: '' });
+    for (var i = deck.length - 1; i > 0; i--) {
+      var j = Math.floor(rand() * (i + 1));
+      var tmp = deck[i]; deck[i] = deck[j]; deck[j] = tmp;
+    }
+    return deck;
+  }
+
+  function autosort(hand) {
+    return hand.slice().sort(function (a, b) {
+      return RANK_ORDER[a.rank] - RANK_ORDER[b.rank] || SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit);
+    });
+  }
+
+  function deal(seed) {
+    var deck = shuffle(seed);
+    var rest = deck.slice(20); // 20 cards set aside
+    var half = rest.length / 2;
+    return { p1: autosort(rest.slice(0, half)), p2: autosort(rest.slice(half)) };
+  }
+
+  function getSeed() { return 10000 + Math.floor(Math.random() * 90000); }
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Remember which cards are greyed out, per seed and role, if storage is available
+  function loadUsed(key) {
+    try { return JSON.parse(localStorage.getItem(key)) || {}; } catch (e) { return {}; }
+  }
+  function saveUsed(key, used) {
+    try { localStorage.setItem(key, JSON.stringify(used)); } catch (e) {}
+  }
+
+  function cardEl(c, used, onToggle) {
+    var el = document.createElement('button');
+    el.type = 'button';
+    var joker = c.rank === 'RJ' || c.rank === 'BJ';
+    var name = c.rank === 'RJ' ? '大鬼' : c.rank === 'BJ' ? '小鬼' : c.rank;
+    el.className = 'card' + (joker ? ' joker' : '') +
+      ((c.suit === '♥' || c.suit === '♦' || c.rank === 'RJ') ? ' red' : '') +
+      (used ? ' used' : '');
+    el.setAttribute('aria-pressed', used ? 'true' : 'false');
+    el.setAttribute('aria-label', name + c.suit);
+    var r = document.createElement('span');
+    r.className = 'rank';
+    r.textContent = name;
+    el.appendChild(r);
+    if (!joker) {
+      var s = document.createElement('span');
+      s.className = 'suit';
+      s.textContent = c.suit;
+      el.appendChild(s);
+    }
+    el.addEventListener('click', function () {
+      var now = el.classList.toggle('used');
+      el.setAttribute('aria-pressed', now ? 'true' : 'false');
+      onToggle(now);
+    });
+    return el;
+  }
+
+  function show(seed, role) {
+    var d = deal(seed);
+    var hand = role === 'A' ? d.p1 : d.p2;
+    var key = 'zsy-used-' + seed + '-' + role;
+    var used = loadUsed(key);
+    var box = $('hand');
+    box.textContent = '';
+    hand.forEach(function (c, i) {
+      box.appendChild(cardEl(c, !!used[i], function (now) {
+        if (now) used[i] = 1; else delete used[i];
+        saveUsed(key, used);
+      }));
+    });
+    $('who').textContent = '你的底牌 (玩家' + role + ')';
+    $('table').hidden = false;
+  }
+
+  function reset() {
+    $('err').hidden = true;
+    $('seedMsg').hidden = true;
+    $('table').hidden = true;
+  }
+
+  $('create').addEventListener('click', function () {
+    reset();
+    $('joinForm').hidden = true;
+    var seed = getSeed();
+    $('seedOut').textContent = seed;
+    $('seedMsg').hidden = false;
+    show(seed, 'A');
+  });
+
+  $('join').addEventListener('click', function () {
+    reset();
+    $('joinForm').hidden = false;
+    $('seedIn').focus();
+  });
+
+  $('joinForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    reset();
+    var v = $('seedIn').value.trim();
+    if (!/^\d{5}$/.test(v) || parseInt(v, 10) < 10000) {
+      $('err').hidden = false;
+      return;
+    }
+    show(parseInt(v, 10), 'B');
+  });
+</script>
