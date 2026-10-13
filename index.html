@@ -1,10 +1,16 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>爭上游</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;800&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
-  /* Layout: one centered column. Create / join buttons on top, then the player's hand as a wrapped row of tappable cards. */
+  /* Layout: one centered column. Create / join buttons on top, then the player's hand as a grid of tappable cards. */
   :root {
+    color-scheme: light;
     --bg: #e9eeea;
     --surface: #f7f9f6;
     --fg: #16241f;
@@ -23,7 +29,8 @@
     --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
+    :root {
+      color-scheme: dark;
       --bg: #0f1a17;
       --surface: #16251f;
       --fg: #e6efe9;
@@ -35,33 +42,20 @@
       --card-edge: #0b1210;
       --card-used: #3a4742;
       --card-used-fg: #6c7a74;
-      color-scheme: dark;
     }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0f1a17;
-    --surface: #16251f;
-    --fg: #e6efe9;
-    --muted: #93a79d;
-    --line: #284038;
-    --accent: #5fc4a3;
-    --accent-fg: #0b1713;
-    --card: #f3efe4;
-    --card-edge: #0b1210;
-    --card-used: #3a4742;
-    --card-used-fg: #6c7a74;
-    color-scheme: dark;
   }
 
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body {
+    margin: 0;
     background: var(--bg);
     color: var(--fg);
     font-family: var(--font-body);
     font-size: 16px;
     line-height: 1.6;
-    padding-inline: 16px;
-    padding-block: 32px 48px;
+    padding-inline: max(16px, env(safe-area-inset-left), env(safe-area-inset-right));
+    padding-block: max(24px, env(safe-area-inset-top)) max(40px, env(safe-area-inset-bottom));
   }
   main { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 20px; }
   h2 { font-family: var(--font-display); font-size: 1.15rem; margin: 0; }
@@ -69,14 +63,15 @@
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   button, input { font: inherit; }
   button.act {
-    min-height: 44px;
-    padding-inline: 22px;
+    min-height: 48px;
+    padding-inline: 26px;
     border-radius: 4px;
     border: 1px solid var(--accent);
     background: var(--accent);
     color: var(--accent-fg);
     font-weight: 700;
     cursor: pointer;
+    touch-action: manipulation;
   }
   button.act.ghost { background: transparent; color: var(--accent); }
   button.act:hover { filter: brightness(1.08); }
@@ -86,14 +81,14 @@
     flex: 1 1 140px;
     max-width: 220px;
     min-width: 0;
-    min-height: 44px;
+    min-height: 48px;
     padding-inline: 12px;
     border-radius: 4px;
     border: 1px solid var(--line);
     background: var(--surface);
     color: var(--fg);
     font-family: var(--font-mono);
-    font-size: 1.1rem;
+    font-size: 18px; /* 16px or larger stops iPhones from zooming in when the field is focused */
     letter-spacing: 0.08em;
   }
   .seed {
@@ -104,7 +99,7 @@
     font-variant-numeric: tabular-nums;
     user-select: all;
   }
-  .msg { margin: 0; }
+  .msg { margin: 0; overflow-wrap: anywhere; }
   .msg.err { color: var(--suit-red); }
 
   .table {
@@ -117,15 +112,19 @@
     gap: 16px;
     min-width: 0;
   }
-  .hand { display: flex; flex-wrap: wrap; gap: 8px; }
+  .hand {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+    gap: 8px;
+  }
   .card {
-    width: 54px;
+    width: 100%;
+    max-width: 84px;
     aspect-ratio: 5 / 7;
-    max-width: 100%;
     padding: 4px 3px;
     background: var(--card);
     border: 1px solid var(--card-edge);
-    border-radius: 5px;
+    border-radius: 6px;
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
     display: grid;
     grid-template-rows: auto 1fr;
@@ -136,23 +135,33 @@
     color: var(--suit-black);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
     touch-action: manipulation;
     transition: background-color 0.12s, color 0.12s, opacity 0.12s;
   }
   .card.red { color: var(--suit-red); }
-  .card .rank { font-size: 1.05rem; align-self: start; }
-  .card .suit { font-size: 1.7rem; align-self: center; }
+  .card .rank { font-size: 1.1rem; align-self: start; }
+  .card .suit { font-size: 1.8rem; align-self: center; }
   .card.joker { padding-top: 6px; }
-  .card.joker .rank { writing-mode: vertical-rl; font-size: 1rem; letter-spacing: 0.1em; align-self: center; grid-row: 1 / span 2; }
+  .card.joker .rank { writing-mode: vertical-rl; font-size: 1.05rem; letter-spacing: 0.1em; align-self: center; grid-row: 1 / span 2; }
   .card.used {
     background: var(--card-used);
     color: var(--card-used-fg);
     opacity: 0.6;
     box-shadow: none;
   }
+  @media (max-width: 480px) {
+    .table { padding: 12px; gap: 12px; }
+    .hand { gap: 6px; }
+    button.act { flex: 1 1 0; }
+  }
   @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
   [hidden] { display: none !important; }
 </style>
+</head>
+<body>
 
 <main>
   <div class="row" id="choose">
@@ -307,3 +316,5 @@
     show(parseInt(v, 10), 'B');
   });
 </script>
+</body>
+</html>
