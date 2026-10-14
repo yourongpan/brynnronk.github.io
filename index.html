@@ -159,26 +159,46 @@
   }
   @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
   [hidden] { display: none !important; }
+
+  .topbar { display: flex; justify-content: flex-end; }
+  button.lang {
+    min-height: 40px;
+    min-width: 64px;
+    padding-inline: 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--fg);
+    font-weight: 500;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  button.lang:hover { border-color: var(--accent); }
+  html[lang="en"] .card.joker .rank { font-size: 0.85rem; letter-spacing: 0.05em; }
 </style>
 </head>
 <body>
 
 <main>
+  <div class="topbar">
+    <button class="lang" id="langBtn" type="button">EN</button>
+  </div>
+
   <div class="row" id="choose">
-    <button class="act" id="create" type="button">創建</button>
-    <button class="act ghost" id="join" type="button">加入</button>
+    <button class="act" id="create" type="button" data-i18n="create">創建</button>
+    <button class="act ghost" id="join" type="button" data-i18n="join">加入</button>
   </div>
 
   <form id="joinForm" hidden>
-    <label for="seedIn">輸入你的種子:</label>
+    <label for="seedIn" data-i18n="enterSeed">輸入你的種子:</label>
     <div class="row">
       <input id="seedIn" inputmode="numeric" maxlength="5" autocomplete="off">
-      <button class="act" type="submit">加入</button>
+      <button class="act" type="submit" data-i18n="join">加入</button>
     </div>
   </form>
 
-  <p class="msg" id="seedMsg" hidden>請給你的朋友分享這個種子: <span class="seed" id="seedOut"></span></p>
-  <p class="msg err" id="err" role="alert" hidden>無效輸入，請你重新開始!</p>
+  <p class="msg" id="seedMsg" hidden><span data-i18n="shareSeed">請給你的朋友分享這個種子:</span> <span class="seed" id="seedOut"></span></p>
+  <p class="msg err" id="err" role="alert" hidden data-i18n="invalid">無效輸入，請你重新開始!</p>
 
   <section class="table" id="table" hidden>
     <h2 id="who"></h2>
@@ -231,6 +251,62 @@
 
   var $ = function (id) { return document.getElementById(id); };
 
+  // ---- Language (Traditional Chinese / English) ----
+  var I18N = {
+    zh: {
+      title: '爭上游test',
+      create: '創建',
+      join: '加入',
+      enterSeed: '輸入你的種子:',
+      shareSeed: '請給你的朋友分享這個種子:',
+      invalid: '無效輸入，請你重新開始!',
+      hand: function (role) { return '你的底牌 (玩家' + role + ')'; },
+      bigJoker: '大鬼', smallJoker: '小鬼',
+      bigJokerLabel: '大鬼', smallJokerLabel: '小鬼',
+      switchTo: 'EN', switchLabel: 'Switch to English'
+    },
+    en: {
+      title: 'Zheng Shang You test',
+      create: 'Create',
+      join: 'Join',
+      enterSeed: 'Enter your seed:',
+      shareSeed: 'Share this seed with your friend:',
+      invalid: 'Invalid input, please start over!',
+      hand: function (role) { return 'Your hand (Player ' + role + ')'; },
+      bigJoker: 'JOKER', smallJoker: 'JOKER',
+      bigJokerLabel: 'Big Joker', smallJokerLabel: 'Small Joker',
+      switchTo: '中文', switchLabel: '切換到中文'
+    }
+  };
+
+  function initialLang() {
+    try {
+      var saved = localStorage.getItem('zsy-lang');
+      if (saved === 'zh' || saved === 'en') return saved;
+    } catch (e) {}
+    return /^zh/i.test(navigator.language || '') ? 'zh' : 'en';
+  }
+
+  var lang = initialLang();
+  var current = null; // { seed, role } of the hand on screen, so it can be redrawn in the new language
+  function t(key) { return I18N[lang][key]; }
+
+  function applyLang() {
+    document.documentElement.lang = lang === 'zh' ? 'zh-Hant' : 'en';
+    document.title = t('title');
+    var nodes = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute('data-i18n'));
+    $('langBtn').textContent = t('switchTo');
+    $('langBtn').setAttribute('aria-label', t('switchLabel'));
+    if (current) show(current.seed, current.role);
+  }
+
+  $('langBtn').addEventListener('click', function () {
+    lang = lang === 'zh' ? 'en' : 'zh';
+    try { localStorage.setItem('zsy-lang', lang); } catch (e) {}
+    applyLang();
+  });
+
   // Remember which cards are greyed out, per seed and role, if storage is available
   function loadUsed(key) {
     try { return JSON.parse(localStorage.getItem(key)) || {}; } catch (e) { return {}; }
@@ -243,12 +319,13 @@
     var el = document.createElement('button');
     el.type = 'button';
     var joker = c.rank === 'RJ' || c.rank === 'BJ';
-    var name = c.rank === 'RJ' ? '大鬼' : c.rank === 'BJ' ? '小鬼' : c.rank;
+    var name = c.rank === 'RJ' ? t('bigJoker') : c.rank === 'BJ' ? t('smallJoker') : c.rank;
+    var label = c.rank === 'RJ' ? t('bigJokerLabel') : c.rank === 'BJ' ? t('smallJokerLabel') : c.rank + c.suit;
     el.className = 'card' + (joker ? ' joker' : '') +
       ((c.suit === '♥' || c.suit === '♦' || c.rank === 'RJ') ? ' red' : '') +
       (used ? ' used' : '');
     el.setAttribute('aria-pressed', used ? 'true' : 'false');
-    el.setAttribute('aria-label', name + c.suit);
+    el.setAttribute('aria-label', label);
     var r = document.createElement('span');
     r.className = 'rank';
     r.textContent = name;
@@ -280,7 +357,8 @@
         saveUsed(key, used);
       }));
     });
-    $('who').textContent = '你的底牌 (玩家' + role + ')';
+    $('who').textContent = t('hand')(role);
+    current = { seed: seed, role: role };
     $('table').hidden = false;
   }
 
@@ -288,6 +366,7 @@
     $('err').hidden = true;
     $('seedMsg').hidden = true;
     $('table').hidden = true;
+    current = null;
   }
 
   $('create').addEventListener('click', function () {
@@ -315,6 +394,8 @@
     }
     show(parseInt(v, 10), 'B');
   });
+
+  applyLang();
 </script>
 </body>
 </html>
