@@ -221,6 +221,17 @@
   <p class="msg" id="seedMsg" hidden><span id="shareText" data-i18n="shareSeed">請給你的朋友分享這個種子:</span> <span class="seed" id="seedOut"></span></p>
   <p class="msg err" id="err" role="alert" hidden data-i18n="invalid">無效輸入，請你重新開始!</p>
 
+  <form id="codeForm" hidden>
+    <label for="codeIn" data-i18n="codeLabel">輸入玩家B給你的代碼:</label>
+    <div class="row">
+      <input id="codeIn" inputmode="numeric" maxlength="5" autocomplete="off">
+      <button class="act" type="submit" data-i18n="confirm">確認</button>
+    </div>
+  </form>
+  <p class="msg err" id="codeErr" role="alert" hidden data-i18n="invalidCode">代碼無效，請再檢查一次。</p>
+
+  <p class="msg" id="giveMsg" hidden><span id="giveText" data-i18n="giveCode2">請把這個代碼給玩家A:</span> <span class="seed" id="codeOut"></span></p>
+
   <section class="table" id="table" hidden>
     <h2 id="who"></h2>
     <div class="hand" id="hand"></div>
@@ -264,8 +275,30 @@
   // The seed itself says how many players: 10000-49999 is a 2-player game, 50000-99999 is a 3-player game.
   function modeOf(seed) { return seed >= 50000 ? 3 : 2; }
 
-  function deal(seed) {
-    var deck = shuffle(seed);
+  // Player B's code is mixed into the shuffle, so Player A cannot pick a seed that gives A a good hand:
+  // the hands do not exist until B's code does.
+  function mix(seed, code) {
+    var h = (seed * 10000 + code) | 0;
+    h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+    h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+    return (h ^ (h >>> 16)) >>> 0;
+  }
+
+  // A code is 4 random digits plus 1 check digit, so a mistyped code is rejected instead of dealing a wrong hand.
+  function checkDigit(n4) {
+    var d = String(n4), w = [1, 3, 7, 9], s = 0;
+    for (var i = 0; i < 4; i++) s += parseInt(d.charAt(i), 10) * w[i];
+    return s % 10;
+  }
+  function encodeCode(n4) { return n4 * 10 + checkDigit(n4); }
+  function decodeCode(str) {
+    if (!/^\d{5}$/.test(str)) return null;
+    var n = parseInt(str, 10), n4 = Math.floor(n / 10);
+    return (n4 >= 1000 && n % 10 === checkDigit(n4)) ? n4 : null;
+  }
+
+  function deal(seed, code) {
+    var deck = shuffle(mix(seed, code));
     if (modeOf(seed) === 3) {
       // 3 players: all 54 cards are dealt, 18 each, nothing set aside
       return {
@@ -300,6 +333,11 @@
       playerC: '玩家C',
       shareSeed: '請給你的朋友分享這個種子:',
       shareSeed3: '請給你的朋友們分享這個種子:',
+      codeLabel: '輸入玩家B給你的代碼:',
+      confirm: '確認',
+      giveCode2: '請把這個代碼給玩家A:',
+      giveCode3: '請把這個代碼給玩家A和玩家C:',
+      invalidCode: '代碼無效，請再檢查一次。',
       invalid: '無效輸入，請你重新開始!',
       hand: function (role) { return '你的底牌 (玩家' + role + ')'; },
       bigJoker: '大鬼', smallJoker: '小鬼',
@@ -317,6 +355,11 @@
       playerC: 'Player C',
       shareSeed: 'Share this seed with your friend:',
       shareSeed3: 'Share this seed with your friends:',
+      codeLabel: 'Enter the code Player B gave you:',
+      confirm: 'Confirm',
+      giveCode2: 'Give this code to Player A:',
+      giveCode3: 'Give this code to Players A and C:',
+      invalidCode: 'Invalid code, please check it and try again.',
       invalid: 'Invalid input, please start over!',
       hand: function (role) { return 'Your hand (Player ' + role + ')'; },
       bigJoker: 'JOKER', smallJoker: 'JOKER',
@@ -344,7 +387,7 @@
     for (var i = 0; i < nodes.length; i++) nodes[i].textContent = t(nodes[i].getAttribute('data-i18n'));
     $('langBtn').textContent = t('switchTo');
     $('langBtn').setAttribute('aria-label', t('switchLabel'));
-    if (current) show(current.seed, current.role);
+    if (current) show(current.seed, current.role, current.code);
   }
 
   $('langBtn').addEventListener('click', function () {
@@ -390,9 +433,9 @@
     return el;
   }
 
-  function show(seed, role) {
-    var hand = deal(seed)[role];
-    var key = 'zsy-used-' + seed + '-' + role;
+  function show(seed, role, code) {
+    var hand = deal(seed, code)[role];
+    var key = 'zsy-used-' + seed + '-' + code + '-' + role;
     var used = loadUsed(key);
     var box = $('hand');
     box.textContent = '';
@@ -403,16 +446,67 @@
       }));
     });
     $('who').textContent = t('hand')(role);
-    current = { seed: seed, role: role };
+    current = { seed: seed, role: role, code: code };
     $('table').hidden = false;
   }
 
+  var pending = null; // { seed, role } waiting for Player B's code
+
   function reset() {
     $('err').hidden = true;
+    $('codeErr').hidden = true;
     $('seedMsg').hidden = true;
+    $('giveMsg').hidden = true;
+    $('codeForm').hidden = true;
     $('table').hidden = true;
     current = null;
+    pending = null;
   }
+
+  // Player B's code is made once per seed and kept, so reloading the page gives the same code and the same hand
+  function getOwnCode(seed) {
+    var key = 'zsy-code-' + seed;
+    try {
+      var saved = parseInt(localStorage.getItem(key), 10);
+      if (saved >= 1000 && saved <= 9999) return saved;
+    } catch (e) {}
+    var code = 1000 + Math.floor(Math.random() * 9000);
+    try { localStorage.setItem(key, String(code)); } catch (e) {}
+    return code;
+  }
+
+  // Player B sees the cards right away, along with the code to hand to the others
+  function showOwn(seed) {
+    var code = getOwnCode(seed);
+    var key = modeOf(seed) === 3 ? 'giveCode3' : 'giveCode2';
+    $('giveText').setAttribute('data-i18n', key);
+    $('giveText').textContent = t(key);
+    $('codeOut').textContent = encodeCode(code);
+    $('giveMsg').hidden = false;
+    show(seed, 'B', code);
+  }
+
+  // Player A (and Player C in a 3-player game) cannot see any cards until Player B's code is entered
+  function askCode(seed, role) {
+    pending = { seed: seed, role: role };
+    $('codeIn').value = '';
+    $('codeForm').hidden = false;
+  }
+
+  $('codeForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!pending) return;
+    var code = decodeCode($('codeIn').value.trim());
+    if (code === null) {
+      $('codeErr').hidden = false;
+      return;
+    }
+    $('codeErr').hidden = true;
+    $('codeForm').hidden = true;
+    var p = pending;
+    pending = null;
+    show(p.seed, p.role, code);
+  });
 
   function create(players) {
     reset();
@@ -423,7 +517,7 @@
     $('shareText').setAttribute('data-i18n', key);
     $('shareText').textContent = t(key);
     $('seedMsg').hidden = false;
-    show(seed, 'A');
+    askCode(seed, 'A');
   }
 
   $('create2').addEventListener('click', function () { create(2); });
@@ -456,7 +550,7 @@
     if (modeOf(seed) === 3) {
       role = document.querySelector('input[name="role"]:checked').value;
     }
-    show(seed, role);
+    if (role === 'B') showOwn(seed); else askCode(seed, role);
   });
 
   applyLang();
