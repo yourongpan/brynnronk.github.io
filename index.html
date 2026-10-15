@@ -156,6 +156,7 @@
     .table { padding: 12px; gap: 12px; }
     .hand { gap: 6px; }
     button.act { flex: 1 1 0; }
+    #choose button.act { flex: 1 1 120px; padding-inline: 14px; }
   }
   @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
   [hidden] { display: none !important; }
@@ -175,6 +176,20 @@
   }
   button.lang:hover { border-color: var(--accent); }
   html[lang="en"] .card.joker .rank { font-size: 0.85rem; letter-spacing: 0.05em; }
+
+  /* Player B / C picker, shown only when a 3-player seed is typed */
+  fieldset.roles { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
+  fieldset.roles legend { padding: 0; margin-bottom: 4px; }
+  label.opt { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin: 0 20px 0 0; cursor: pointer; }
+  input[type="radio"] {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    min-height: 0;
+    max-width: none;
+    padding: 0;
+    accent-color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -185,7 +200,8 @@
   </div>
 
   <div class="row" id="choose">
-    <button class="act" id="create" type="button" data-i18n="create">創建</button>
+    <button class="act" id="create2" type="button" data-i18n="create2">創建 (2人)</button>
+    <button class="act" id="create3" type="button" data-i18n="create3">創建 (3人)</button>
     <button class="act ghost" id="join" type="button" data-i18n="join">加入</button>
   </div>
 
@@ -195,9 +211,14 @@
       <input id="seedIn" inputmode="numeric" maxlength="5" autocomplete="off">
       <button class="act" type="submit" data-i18n="join">加入</button>
     </div>
+    <fieldset class="roles" id="roles" hidden>
+      <legend data-i18n="pickRole">你是哪位玩家?</legend>
+      <label class="opt"><input type="radio" name="role" value="B" checked><span data-i18n="playerB">玩家B</span></label>
+      <label class="opt"><input type="radio" name="role" value="C"><span data-i18n="playerC">玩家C</span></label>
+    </fieldset>
   </form>
 
-  <p class="msg" id="seedMsg" hidden><span data-i18n="shareSeed">請給你的朋友分享這個種子:</span> <span class="seed" id="seedOut"></span></p>
+  <p class="msg" id="seedMsg" hidden><span id="shareText" data-i18n="shareSeed">請給你的朋友分享這個種子:</span> <span class="seed" id="seedOut"></span></p>
   <p class="msg err" id="err" role="alert" hidden data-i18n="invalid">無效輸入，請你重新開始!</p>
 
   <section class="table" id="table" hidden>
@@ -240,14 +261,29 @@
     });
   }
 
+  // The seed itself says how many players: 10000-49999 is a 2-player game, 50000-99999 is a 3-player game.
+  function modeOf(seed) { return seed >= 50000 ? 3 : 2; }
+
   function deal(seed) {
     var deck = shuffle(seed);
-    var rest = deck.slice(20); // 20 cards set aside
+    if (modeOf(seed) === 3) {
+      // 3 players: all 54 cards are dealt, 18 each, nothing set aside
+      return {
+        A: autosort(deck.slice(0, 18)),
+        B: autosort(deck.slice(18, 36)),
+        C: autosort(deck.slice(36))
+      };
+    }
+    var rest = deck.slice(20); // 2 players: 20 cards set aside
     var half = rest.length / 2;
-    return { p1: autosort(rest.slice(0, half)), p2: autosort(rest.slice(half)) };
+    return { A: autosort(rest.slice(0, half)), B: autosort(rest.slice(half)) };
   }
 
-  function getSeed() { return 10000 + Math.floor(Math.random() * 90000); }
+  function getSeed(players) {
+    return players === 3
+      ? 50000 + Math.floor(Math.random() * 50000)
+      : 10000 + Math.floor(Math.random() * 40000);
+  }
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -255,10 +291,15 @@
   var I18N = {
     zh: {
       title: '爭上游test',
-      create: '創建',
+      create2: '創建 (2人)',
+      create3: '創建 (3人)',
       join: '加入',
       enterSeed: '輸入你的種子:',
+      pickRole: '你是哪位玩家?',
+      playerB: '玩家B',
+      playerC: '玩家C',
       shareSeed: '請給你的朋友分享這個種子:',
+      shareSeed3: '請給你的朋友們分享這個種子:',
       invalid: '無效輸入，請你重新開始!',
       hand: function (role) { return '你的底牌 (玩家' + role + ')'; },
       bigJoker: '大鬼', smallJoker: '小鬼',
@@ -267,10 +308,15 @@
     },
     en: {
       title: 'Zheng Shang You test',
-      create: 'Create',
+      create2: 'Create (2 players)',
+      create3: 'Create (3 players)',
       join: 'Join',
       enterSeed: 'Enter your seed:',
+      pickRole: 'Which player are you?',
+      playerB: 'Player B',
+      playerC: 'Player C',
       shareSeed: 'Share this seed with your friend:',
+      shareSeed3: 'Share this seed with your friends:',
       invalid: 'Invalid input, please start over!',
       hand: function (role) { return 'Your hand (Player ' + role + ')'; },
       bigJoker: 'JOKER', smallJoker: 'JOKER',
@@ -345,8 +391,7 @@
   }
 
   function show(seed, role) {
-    var d = deal(seed);
-    var hand = role === 'A' ? d.p1 : d.p2;
+    var hand = deal(seed)[role];
     var key = 'zsy-used-' + seed + '-' + role;
     var used = loadUsed(key);
     var box = $('hand');
@@ -369,18 +414,32 @@
     current = null;
   }
 
-  $('create').addEventListener('click', function () {
+  function create(players) {
     reset();
     $('joinForm').hidden = true;
-    var seed = getSeed();
+    var seed = getSeed(players);
     $('seedOut').textContent = seed;
+    var key = players === 3 ? 'shareSeed3' : 'shareSeed';
+    $('shareText').setAttribute('data-i18n', key);
+    $('shareText').textContent = t(key);
     $('seedMsg').hidden = false;
     show(seed, 'A');
-  });
+  }
+
+  $('create2').addEventListener('click', function () { create(2); });
+  $('create3').addEventListener('click', function () { create(3); });
+
+  // Player B / C choice only appears once a complete 3-player seed has been typed
+  function updateRoles() {
+    var v = $('seedIn').value.trim();
+    $('roles').hidden = !(/^\d{5}$/.test(v) && modeOf(parseInt(v, 10)) === 3);
+  }
+  $('seedIn').addEventListener('input', updateRoles);
 
   $('join').addEventListener('click', function () {
     reset();
     $('joinForm').hidden = false;
+    updateRoles();
     $('seedIn').focus();
   });
 
@@ -392,7 +451,12 @@
       $('err').hidden = false;
       return;
     }
-    show(parseInt(v, 10), 'B');
+    var seed = parseInt(v, 10);
+    var role = 'B';
+    if (modeOf(seed) === 3) {
+      role = document.querySelector('input[name="role"]:checked').value;
+    }
+    show(seed, role);
   });
 
   applyLang();
